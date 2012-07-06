@@ -12,13 +12,7 @@ import firepile.tree.Trees.{
   If => CLIf,
   _}
 import scala.reflect._
-import firepile.compiler.Return
-import firepile.compiler.EmptyTree
-import firepile.compiler.DummyTree
-import firepile.compiler.ArrayDef
-import firepile.compiler.Struct
-import firepile.compiler.TypeDef
-import firepile.compiler.FunctionDec
+import firepile.compiler._
 
 object Reflect2CL {
   implicit def toCLTree(t: scala.reflect.Tree): CLTree = t match {
@@ -79,8 +73,14 @@ object Reflect2CL {
     case Return(ret) => CLReturn(toCLTree(ret))
     case Ident(v) => v
     case Struct(name, fields) => StructDef(Id(name), fields.map(f => toCLTree(f)))
+    case Union(name, fields) => UnionDef(Id(name), fields.map(f => toCLTree(f)))
+    case Enum(name, fields) => {
+      EnumDef(Id(name), fields.map(f => f match {
+        case ValDef(LocalValue(_, name, _), _) => Id(name)
+      })/* fields.map(f => toCLTree(f)) */)
+    }
     case TypeDef(NamedType(old), NamedType(nw)) => Eval(Id("typedef struct " + old + " " + nw))
-
+    case Block(body, _) => TreeSeq(body.map(b => toCLTree(b)))
     case Target(lbl,_) => lbl
     case Literal(value) => value match {
       case l: Int => IntLit(l)
@@ -88,6 +88,7 @@ object Reflect2CL {
       case l: Double => DoubleLit(l)
       case l => throw new RuntimeException("Unmatched literal: " + l)
     }
+    case Reference(tre) => Ref(toCLTree(tre))
     case EmptyTree() => TreeSeq()
     case x => Id(x.toString)
   }
@@ -97,7 +98,8 @@ object Reflect2CL {
     case LabelSymbol(target) => Label(target)
     case Class(name) => Id(name)
     case Field(name, typ) => Id(name)
-    case _ => Id("unsupported")
+    case NoSymbol => TreeSeq()
+    case _ => Id("unsupported: " + s)
   }
 
   def methodToBinOp(methodName: String): Option[String] = shortMethodName(methodName) match {
@@ -140,6 +142,7 @@ object Reflect2CL {
       case LocalValue(_,n,NamedType(t)) if t.equals("firepile_Group") => Formal(PtrType(ValueType(t)),n)
       case LocalValue(_,n,NamedType(t)) if t.equals("firepile_Item") => Formal(PtrType(ValueType(t)),n)
       case LocalValue(_,n,NamedType(t)) if t.equals("kernel_ENV") => Formal(ValueType(t),n)
+      case LocalValue(_,n,PtrTyp(t, mem)) => Formal(translateType(f.tpe), n)
       case n => Formal(ConstType(translateType(f.tpe)), Id(f.name))
     }
   }
@@ -163,7 +166,12 @@ object Reflect2CL {
       case n if n.startsWith("c_") => MemType("constant",PtrType(ValueType(translateType(n.substring(n.indexOf("c_")+2)))))
       case n => ValueType(translateType(n)) // ValueType(firepile.compiler.JVM2Reflect.mangleName(n)) // ValueType(translateType(n))
     }
-    case NamedType(name) => ValueType(name)
+    // TODO: Fix this "catch all" array case
+    case NamedType(name) => if (name.endsWith("Array") && !name.startsWith("g_") && !name.startsWith("l_")) ValueType("g_" + firepile.compiler.JVM2Reflect.mangleName(name))
+                            else ValueType(name)
+    case StructTyp(name) => PtrType(StructType(name))
+    case UnionTyp(name) => UnionType(name)
+    case PtrTyp(typ, memSpace) => MemType(memSpace, PtrType(translateType(typ)))
     case x => ValueType("unmatched type: " + x) // throw new RuntimeException("unsupported type: " + x)  
   }
 

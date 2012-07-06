@@ -2,7 +2,7 @@
 
 FIREPILE_HOME=${FIREPILE_HOME-`dirname $( cd "$( dirname "$0" )" && pwd )`}
 
-FIREPILE_CLASSPATH=$FIREPILE_HOME/target/scala-2.9.1/classes:$FIREPILE_HOME/target/scala-2.9.1/test-classes:$FIREPILE_HOME/lib/javacl-1.0-beta-5-shaded.jar:$FIREPILE_HOME/lib/sootclasses.jar
+FIREPILE_CLASSPATH=$FIREPILE_HOME/target/scala-2.9.1/classes:$FIREPILE_HOME/target/scala-2.9.1/test-classes:$FIREPILE_HOME/lib/javacl-1.0-beta-5-shaded.jar:$FIREPILE_HOME/lib/sootclasses.jar:$FIREPILE_HOME/lib/abc.jar:$FIREPILE_HOME/lib/memory.jar
 
 SCALA_LIB_JAR=$SCALA_HOME/lib/scala-library.jar
 

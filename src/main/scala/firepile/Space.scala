@@ -8,9 +8,16 @@ import java.util.ArrayList
 
 class Item {
   var id: Int = 0
-  def id(i: Int): Int = { id = i; 0 }
+
+  def id(i: Int): Int = {
+    id = i; 0
+  }
+
   var globalId: Int = 0
-  def globalId(i: Int): Int = { globalId = i; 0 }
+
+  def globalId(i: Int): Int = {
+    globalId = i; 0
+  }
 
 }
 
@@ -18,12 +25,24 @@ class Group {
 
   val items: List[Item] = List(new Item)
   var id: Int = 0
-  def id(i: Int): Int = { id = i; 0 }
+
+  def id(i: Int): Int = {
+    id = i; 0
+  }
+
   var local: Int = 0
-  def local(i: Int): Int = { local = i; 0 }
+
+  def local(i: Int): Int = {
+    local = i; 0
+  }
+
   def barrier = ()
+
   var size: Int = 0
-  def size(i: Int): Int = { size =i ; size}
+
+  def size(i: Int): Int = {
+    size = i; size
+  }
 
 }
 
@@ -53,96 +72,99 @@ val sizeA2 = transA2.sizes(1).head
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
     val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
-    
+
     kernArgs match {
-    
-    case Some((kernName: String, treeList: List[Tree])) => {
-						       val kernStr = new StringBuffer()
-						       // println(" name ::" + kernName + "::\n")
-						       for (t: Tree <- treeList.reverse)
-							kernStr.append(t.toCL)
-							
-						       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
-						       Kernel.printTime
-						      }
-                                                  
-    case None => { println(" Something went wrong while creating Kernel!!!") }
-	//
 
-     }
- }
+      case Some((kernName: String, treeList: List[Tree])) => {
+        val kernStr = new StringBuffer()
+        // println(" name ::" + kernName + "::\n")
+        for (t: Tree <- treeList.reverse)
+          kernStr.append(t.toCL)
 
- /*
-   Some bug caused by having implicit e having default value
- def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
-    println("in Spawn3")
-    val fvals = block
-    val fbody = () => block
-  
-    
-    var f_in: Function2[_,_,_] = null
-    var closureTree: List[firepile.tree.Trees.Tree] = null
-    
+        println("Kernel: \n" + kernStr)
+        firepile.Compiler.compileNew(fvals, kernName, kernStr.toString, dev) //(m1,m2,m3,dev) 
+        Kernel.printMemUse
+      }
 
+      case None => {
+        println(" Something went wrong while creating Kernel!!!")
+      }
+      //
 
-    if (e != null) {
-      f_in = implicitly[Function2[_,_,_]]
-
-      println("type of f is: " + whatIsTypeName(f_in))
-
-      closureTree = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
     }
+  }
 
-
-    //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
-    
-    val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
-
-    kernArgs match {
-    
-    case Some((kernName: String, treeList: List[Tree])) => {
-                                                       val kernStr = new StringBuffer()
-                                                       // println(" name ::" + kernName + "::\n")
-                                                       for (t: Tree <- treeList.reverse)
-                                                         kernStr.append(t.toCL)
-                                                        
-                                                       if (closureTree != null) {
-                                                         val rewrittenClosureTree = closureTree match {
-                                                           case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
-                                                           case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
-                                                         }
-
-                                                         kernStr.append(rewrittenClosureTree.toCL)
-                                                       }
-
-                                                       println("Final kernel code: \n" + kernStr.toString)
-                                                       
-                                                       
-                                                       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
-
-                                                       Kernel.printTime
-                                                      }
-                                                  
-    case None => { println(" Something went wrong while creating Kernel!!!") }
-        //
-
+  /*
+    Some bug caused by having implicit e having default value
+  def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
+     println("in Spawn3")
+     val fvals = block
+     val fbody = () => block
+   
+     
+     var f_in: Function2[_,_,_] = null
+     var closureTree: List[firepile.tree.Trees.Tree] = null
+     
+ 
+ 
+     if (e != null) {
+       f_in = implicitly[Function2[_,_,_]]
+ 
+       println("type of f is: " + whatIsTypeName(f_in))
+ 
+       closureTree = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
      }
- }
- */
+ 
+ 
+     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
+     
+     val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
+ 
+     kernArgs match {
+     
+     case Some((kernName: String, treeList: List[Tree])) => {
+                                                        val kernStr = new StringBuffer()
+                                                        // println(" name ::" + kernName + "::\n")
+                                                        for (t: Tree <- treeList.reverse)
+                                                          kernStr.append(t.toCL)
+                                                         
+                                                        if (closureTree != null) {
+                                                          val rewrittenClosureTree = closureTree match {
+                                                            case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
+                                                            case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
+                                                          }
+ 
+                                                          kernStr.append(rewrittenClosureTree.toCL)
+                                                        }
+ 
+                                                        println("Final kernel code: \n" + kernStr.toString)
+                                                        
+                                                        
+                                                        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
+ 
+                                                        Kernel.printTime
+                                                       }
+                                                   
+     case None => { println(" Something went wrong while creating Kernel!!!") }
+         //
+ 
+      }
+  }
+  */
 
-  def spawnF[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
+  def spawnF[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_, _, _] = null) = {
     // println("in Spawn3")
     val fvals = block
     val fbody = () => block
-  
-    
-    var f_in: Function2[_,_,_] = null
+
+
+    var f_in: Function2[_, _, _] = null
     var closureTree: List[firepile.tree.Trees.Tree] = null
-    
+
 
 
     if (e != null) {
-      f_in = implicitly[Function2[_,_,_]]
+      f_in = implicitly[Function2[_, _, _]]
 
       // println("type of f is: " + whatIsTypeName(f_in))
 
@@ -155,69 +177,73 @@ val sizeA2 = transA2.sizes(1).head
 
 
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
-    
+
     val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
 
     kernArgs match {
-    
-    case Some((kernName: String, treeList: List[Tree])) => {
-                                                       val kernStr = new StringBuffer()
-                                                       // println("\n\n name ::" + kernName + "::\n")
-                                                       for (t: Tree <- treeList.reverse)
-                                                         kernStr.append(t.toCL)
-                                                        
-                                                       if (closureTree != null) {
-                                                         val rewrittenClosureTree = closureTree match {
-                                                           case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
-                                                           case FunDef(retType, name, params, body) :: fs => FunDef(retType, Kernel.closureFName, params, body)
-                                                           case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
-                                                         }
 
-                                                         kernStr.append(rewrittenClosureTree.toCL)
-                                                       }
+      case Some((kernName: String, treeList: List[Tree])) => {
+        val kernStr = new StringBuffer()
+        // println("\n\n name ::" + kernName + "::\n")
+        for (t: Tree <- treeList.reverse)
+          kernStr.append(t.toCL)
 
-                                                       // println("Final kernel code: \n" + kernStr.toString)
-                                                       
-                                                       
-                                                       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
+        if (closureTree != null) {
+          val rewrittenClosureTree = closureTree match {
+            case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
+            case FunDef(retType, name, params, body) :: fs => FunDef(retType, Kernel.closureFName, params, body)
+            case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
+          }
 
-                                                       Kernel.printTime
-                                                      }
-                                                  
-    case None => { println(" Something went wrong while creating Kernel!!!") }
-        //
+          kernStr.append(rewrittenClosureTree.toCL)
+        }
 
-     }
- }
+        // println("Final kernel code: \n" + kernStr.toString)
 
- 
-   def spawn[A, B, C, D](block: => (A, B, C, D))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], dev: Device) = {
-     //println("in Spawn")
-     val fvals = block
-     val fbody = () => block
- 
-     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
- 
-     val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 4, List(m1, m2, m3, m4), dev), "Compile")
-     
-     kernArgs match {
-     
-     case Some((kernName: String, treeList: List[Tree])) => {
- 						       val kernStr = new StringBuffer()
- 						       // println(" name ::" + kernName + "::\n")
- 						       for (t: Tree <- treeList.reverse)
- 							kernStr.append(t.toCL)
- 							
- 						        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString,dev)(m1,m2,m3,m4) 
- 						      }
-                                                   
-     case None => { println(" Something went wrong while creating Kernel!!!") }
- 	//
- 
+
+        firepile.Compiler.compileNew(fvals, kernName, kernStr.toString, dev) //(m1,m2,m3,dev) 
+
+        Kernel.printMemUse
       }
- }
 
-   def spawn[A, B, C, D, E](block: => (A, B, C, D, E))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], m5: Marshal[E], dev: Device) = {
+      case None => {
+        println(" Something went wrong while creating Kernel!!!")
+      }
+      //
+
+    }
+  }
+
+
+  def spawn[A, B, C, D](block: => (A, B, C, D))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], dev: Device) = {
+    //println("in Spawn")
+    val fvals = block
+    val fbody = () => block
+
+    //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
+
+    val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 4, List(m1, m2, m3, m4), dev), "Compile")
+
+    kernArgs match {
+
+      case Some((kernName: String, treeList: List[Tree])) => {
+        val kernStr = new StringBuffer()
+        // println(" name ::" + kernName + "::\n")
+        for (t: Tree <- treeList.reverse)
+          kernStr.append(t.toCL)
+
+        firepile.Compiler.compileNew(fvals, kernName, kernStr.toString, dev)(m1, m2, m3, m4)
+      }
+
+      case None => {
+        println(" Something went wrong while creating Kernel!!!")
+      }
+      //
+
+    }
+  }
+
+  def spawn[A, B, C, D, E](block: => (A, B, C, D, E))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], m5: Marshal[E], dev: Device) = {
     // println("in Spawn")
     val fvals = block
     // println("fvals = block")
@@ -228,32 +254,36 @@ val sizeA2 = transA2.sizes(1).head
 
     val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 5, List(m1, m2, m3, m4, m5), dev), "Compile")
     // println("findAllmethods done")
-    
-    kernArgs match {
-    
-    case Some((kernName: String, treeList: List[Tree])) => {
-						       val kernStr = new StringBuffer()
-						       // println(" name ::" + kernName + "::\n")
-						       for (t: Tree <- treeList.reverse)
-							kernStr.append(t.toCL)
-							
-						        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString,dev)(m1,m2,m3,m4,m5) 
-						      }
-                                                  
-    case None => { println(" Something went wrong while creating Kernel!!!") }
-	//
 
-     }
- }
+    kernArgs match {
+
+      case Some((kernName: String, treeList: List[Tree])) => {
+        val kernStr = new StringBuffer()
+        // println(" name ::" + kernName + "::\n")
+        for (t: Tree <- treeList.reverse)
+          kernStr.append(t.toCL)
+
+        firepile.Compiler.compileNew(fvals, kernName, kernStr.toString, dev)(m1, m2, m3, m4, m5)
+      }
+
+      case None => {
+        println(" Something went wrong while creating Kernel!!!")
+      }
+      //
+
+    }
+  }
 
   class GroupIterator extends Iterator[Group] {
     def hasNext = false
+
     def next = null
   }
 
   class GroupIterable extends Iterable[Group] {
     def iterator = new GroupIterator
-    override def foreach[Unit](f: (Group) => Unit) = { } 
+
+    override def foreach[Unit](f: (Group) => Unit) = {}
   }
 
   // val groups: List[Group] = List(new Group)

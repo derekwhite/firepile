@@ -2,12 +2,18 @@ package firepile.compiler
 
 import scala.tools.scalap._
 import scala.tools.scalap.{ Main => Scalap }
-// import scala.tools.scalap.scalax.rules.scalasig._
+import firepile.memory.{AllocationPoint, FPMemUse}
+import firepile.compiler.JVM2Reflect.ClassTable
+import soot.jimple._
 
-import scala.reflect._
+import scala.tools.scalap.scalax.rules.scalasig.NullaryMethodType
+
+import scala.reflect._ //{ NullaryMethodType => NMT, _ }
 import firepile.tree.Trees.{Tree => CLTree}
 
 import scala.collection.mutable.Queue
+import scala.collection.mutable.Buffer
+import scala.collection.mutable.Stack
 import scala.collection.mutable.HashSet
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
@@ -30,14 +36,11 @@ import soot.RefType
 import soot.toolkits.graph.ExceptionalUnitGraph
 import soot.toolkits.graph.UnitGraph
 import soot.Hierarchy
-import soot.jimple.JimpleBody
-import soot.jimple.Jimple
 import soot.grimp.Grimp
 import soot.grimp.GrimpBody
 import soot.grimp.internal.GVirtualInvokeExpr
 import soot.grimp.internal.{GInstanceFieldRef => SootGInstanceFieldRef}
 import soot.{ Type => SootType }
-import soot.jimple.Stmt
 import soot.{ VoidType => SootVoidType }
 import soot.{ BooleanType => SootBooleanType }
 import soot.{ ByteType => SootByteType }
@@ -72,35 +75,76 @@ import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.Kernel
 // import firepile.tree.Trees.{ Seq => TreeSeq }
 import scala.Seq
-import soot.jimple.{
-  FloatConstant,
-  DoubleConstant,
-  IntConstant,
-  LongConstant,
-  StringConstant
-}
 import firepile.compiler.GrimpUnapply._
 import firepile.Marshaling._
 import firepile.BBArrayMarshal
 import firepile.Device
 
+import abc.analoop.LoopComplexityAnalyzer
+import firepile.memory.ComplexityExpression
+import firepile.memory.LoopUtils.innermostLoop
+
 import scala.collection.mutable.HashMap
+
 
 import scala.reflect.generic._
 
 
 case class DummyTree(name: String) extends Tree
 case class Struct(name: String, elems: List[Tree]) extends Tree
+case class Union(name: String, elems: List[Tree]) extends Tree
+case class StructTyp(name: String) extends Type
+case class UnionTyp(name: String) extends Type
+case class Enum(name: String, elems: List[Tree]) extends Tree
 case class EmptyTree() extends Tree
 case class ArrayDef(sym: Symbol, dim: Tree) extends Tree
 case class Return(exp: Tree) extends Tree
 case class TypeDef(old: Type, nw: Type) extends Tree
 case class FunctionDec(ret: Type, name: String, formals: List[Symbol]) extends Tree
+case class PtrTyp(typ: Type, memSpace: String = "global") extends Type
+case class Reference(typ: Tree) extends Tree
+
+case class MallocFunction(name: String, dataSize: Int, typ: SootType) {
+  def getTree: Tree = {
+    val globalId = Apply(Select(Ident(NoSymbol), Method("get_global_id",MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))),
+      PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))), List(Literal(0)))
+    val temp = LocalValue(NoSymbol, "temp", JVM2Reflect.translateType(typ))
+    val ptr = LocalValue(NoSymbol, "ptr", PtrTyp(JVM2Reflect.translateType(typ)))
+    val offset = LocalValue(NoSymbol,"offset",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))
+    val body = List[Tree](
+      ValDef(ptr, EmptyTree()),
+      ValDef(temp, EmptyTree()),
+      ValDef(offset, EmptyTree()),
+      Assign(Ident(ptr), Apply(Select(Ident(ptr),Method("scala.Array.apply",JVM2Reflect.translateType(typ))),List(Ident(offset)))),
+      Assign(Ident(offset), Apply(Select(Ident(offset),Method("$plus",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))),List(Literal(dataSize))))
+    )
+    Function(List(LocalValue(NoSymbol,"heap", PrefixedType(ThisType(Class("scala")),Class("scala.Any")))), Block(body, Ident(Method(name, JVM2Reflect.translateType(typ)))))
+  }
+}
+
+case class MallocArrayFunction(name: String, arraySize: Int, typ: SootArrayType) {
+  def getTree: Tree = {
+    val globalId = Apply(Select(Ident(NoSymbol), Method("get_global_id",MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))),
+      PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))), List(Literal(0)))
+    val arrayOffset = Apply(Select(globalId, Method("$times",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))),List(Literal(arraySize)))
+    val temp = LocalValue(NoSymbol, "temp", JVM2Reflect.translateType(typ))
+    val ptr = LocalValue(NoSymbol, "ptr", PtrTyp(JVM2Reflect.translateType(typ.getElementType)))
+    val body = List[Tree](
+      ValDef(ptr, EmptyTree()),
+      ValDef(temp, EmptyTree()),
+      Assign(Ident(ptr), Reference(Apply(Select(Ident(LocalValue(NoSymbol, "heap", JVM2Reflect.translateType(typ.getElementType))),Method("scala.Array.apply", JVM2Reflect.translateType(typ))),List(arrayOffset)))),
+      Assign(Select(Ident(temp),Field("data", NoType)), Ident(ptr)),
+      Assign(Select(Ident(temp),Field("length", NoType)), Literal(arraySize)),
+      Return(Ident(temp))
+    )
+    Function(List(LocalValue(NoSymbol,"heap", PtrTyp(JVM2Reflect.translateType(typ.getElementType)))), Block(body, Ident(Method(name, JVM2Reflect.translateType(typ)))))
+  }
+}
 
 
 object JVM2Reflect {
 
-  def main(args: Array[String]) = {
+/*  def main(args: Array[String]) = {
     if (args.length != 2) {
       println("usage: firepile.compile.JVM2Reflect className methodSig")
       sys.exit(1)
@@ -111,22 +155,27 @@ object JVM2Reflect {
 
     val tree = compileRoot(className, methodSig, List[Marshal[_]]())
 
-    
+
     // println("Printing tree")
     // for (t <- tree) println(t.toString)
-    
+
 
     tree
-  }
+  }*/
 
   private val makeCallGraph = true
   private var activeHierarchy: Hierarchy = null
-  private var ids = Array(false, false, false)
   private var argsByIndex = new ListBuffer[(Boolean,Type)]()
+  private val allocByUnit = new HashMap[SootUnit,AllocationPoint]()
+  private val mallocFunctions = new ListBuffer[MallocFunction]()
+  private val mallocArrayFunctions = new ListBuffer[MallocArrayFunction]()
+  private val collectedFields = new HashMap[java.lang.reflect.Field,AnyRef]()
+  private val collectedIntFields = new HashMap[String,Int]()
+  private val preambleEnvs = new ListBuffer[Tree]()
 
   setup
 
-  def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]], dev: Device = null): List[CLTree] = {
+  def compileRoot(className: String, fInst: AnyRef, methodSig: String, argMarshals: List[Marshal[_]], dev: Device = null): List[CLTree] = {
     // println("compiling " + className + "." + methodSig)
     /*
     println("arg types: " + argMarshals.map(am => am match {
@@ -135,6 +184,10 @@ object JVM2Reflect {
         case x => "unknown marshal " + x
       }))
     */
+
+    
+    collectFields(fInst)
+
 
     // println("argMarshals.length = " + argMarshals.length)
     for (am <- argMarshals) {
@@ -219,6 +272,45 @@ object JVM2Reflect {
     }
   }
 
+  def collectFields(f: AnyRef): Unit = {
+    if (f == null) return
+
+    val claz = f.getClass
+    println("collecting fields of class: " + claz.getName)
+
+    for (field <- claz.getDeclaredFields) {
+      println("field: " + field + " field type " + field.getType.getName)
+      field.setAccessible(true)
+
+      val fieldInst = field.get(f)
+
+//      println("Class packages for field: " + fieldInst.getClass.getPackage + " against " + claz.getPackage.getName)
+
+//      println("Field " + field.getName + " is of type " + field.getType.getName)
+      
+      if (!collectedFields.contains(field) /*&& field.getType.getName.equals("int") && fieldInst.getClass.getPackage.equals(claz.getPackage) */) {
+        println("ADDED FIELD: ".+(field.getName))
+        collectedFields.put(field, field.get(f))
+
+        fieldInst.asInstanceOf[Any] match {
+          case x: Int => { 
+            println("Int value captured: " + x)
+            
+            if (field.getName.contains("$"))
+              collectedIntFields.put(field.getName.substring(0, field.getName.indexOf("$")), x)
+            else
+              collectedIntFields.put(field.getName, x)
+          }
+          case _ => { }
+        }
+
+        //collectFields(field.get(f))
+      }
+    }
+
+  }
+
+  
   private def setup = {
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
@@ -242,13 +334,14 @@ object JVM2Reflect {
   def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
   def mangleName(name: String): String = name.replace(' ', '_').replace('$', '_').replace('.', '_')
 
-  private implicit def v2tree(v: Value)(implicit iv: (SymbolTable, HashMap[String, Value]) = null): Tree = translateExp(v, iv._1, iv._2)
+  private implicit def v2tree(v: Value)(implicit iv: (SymbolTable, HashMap[String, Value]) = null, currentUnit: SootUnit = null): Tree = translateExp(v, iv._1, iv._2)
 
   var next = 0
   def freshName(base: String = "tmp") = {
     next += 1
     base + next
   }
+
 
   class Worklist[A] extends Queue[A] {
     val inWorklist = new HashSet[A]
@@ -290,6 +383,21 @@ object JVM2Reflect {
     }
   }
 
+  case class CompileMethodTree(t: Tree) extends Task {
+    def run = {
+      /*
+      t match {
+        case FunDef(_, name, _, _) if name.startsWith("firepile_util_") => Nil
+        case _ => List(compileMethod(t))
+      }
+      */
+      
+      List(compileMethod(t))
+    }
+
+    def method = null
+  }
+
   case class CompileRootMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
     def run = {
       // println("CompileRootMethodTask.run()")
@@ -301,6 +409,7 @@ object JVM2Reflect {
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.SIGNATURES)
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
+
 
       compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
         case null => Nil
@@ -323,6 +432,7 @@ object JVM2Reflect {
                 }
               }
               case LocalValue(_, name, nt) => { // constants, scalars
+                println("ADDING TO popArrayStructs: " + name)
                 popArrayStructs += Assign(Select(Ident(LocalValue(NoSymbol,"_this_kernel",NamedType("kernel"))),Field(name,nt)), Ident(LocalValue(NoSymbol, name, nt)))
                 nt match {
                   case NamedType(n) if n.startsWith("g_") => List(LocalValue(NoSymbol, "g_"+name, NamedType(n.substring(n.indexOf("g_")+2))))
@@ -410,7 +520,6 @@ object JVM2Reflect {
   private def processWorklist = {
     val results = ListBuffer[Tree]()
     val preambleArrays = ListBuffer[Tree]()
-    val preambleEnvs = ListBuffer[Tree]()
 
     envstructs.structs += NamedType("firepile_Group") ->
       List(Struct("_firepile_Group", List(ValDef(LocalValue(NoSymbol, "id", PrefixedType(ThisType(Class("scala")),Class("scala.Int"))),EmptyTree()),
@@ -428,11 +537,15 @@ object JVM2Reflect {
       val task = worklist.dequeue
       val ts = task.run
       ts match {
-        case Function(params, Block(body, Ident(Method(funName, retType)))) :: fs => {
+        case Function(params, funBlock@Block(body, Ident(Method(funName, retType)))) :: fs => {
+          println("Task completed for function: " + funName)
           if (!functionDefs.contains(funName)) {
-            if (!funName.equals(kernelMethodName))
+            if (funName.equals(kernelMethodName))
+              results ++= ts
+            else {
               functionDefs += funName -> FunctionDec(retType, funName, params)
-            results ++= ts
+              results ++= ts
+            }
           }
         }
         case _ => results ++= ts
@@ -441,17 +554,53 @@ object JVM2Reflect {
 
     preambleArrays ++= arraystructs.structs.values.flatten.map(as => TypeDef(NamedType(as.asInstanceOf[Struct].name), NamedType(as.asInstanceOf[Struct].name.substring(1))))
 
+    val resultsWithHeapBufs = insertHeapBuffers(results.toList)
 
-    val tree = arraystructs.dumpArrayStructs ::: preambleArrays.toList ::: envstructs.dumpEnvStructs ::: preambleEnvs.toList ::: functionDefs.values.toList ::: results.toList
+    val tree = arraystructs.dumpArrayStructs ::: preambleArrays.toList ::: envstructs.dumpEnvStructs ::: preambleEnvs.toList ::: classtab.dumpClassTable ::: functionDefs.values.toList ::: resultsWithHeapBufs
 
     arraystructs.clearArrays
     envstructs.clearEnvs
     functionDefs.clear
-    // classtab.clearClassTable
+    classtab.clearClassTable
 
     tree
   }
 
+  // Takes functions, search for the kernel function and append heap buffers to its params.  Also appends
+  // these args to the kernel_ENV struct and populate the elements.
+  def insertHeapBuffers(functions: List[Tree]): List[Tree] = {
+    println("ADDING PARAMS FOR HEAP BUFFERS: " + allocByUnit)
+    val heapParams = allocByUnit.values.toList.distinct.map(fp => LocalValue(NoSymbol, "_heap_"+fp.mallocNum, PtrTyp(translateType(fp.getElementType))))
+    val allocPoints = allocByUnit.values.toList.distinct
+
+    var x = 1
+    for (ap <- allocPoints) {
+      val sizeToAlloc = LoopComplexityAnalyzer(ap.loop) match {
+        case Some((z, c)) => ComplexityExpression(c, collectedIntFields.toMap)
+        case None => 100                                                     // TODO: FILL IN SIZE FOR SINGLE ELEMENT TYPE
+      }
+      Kernel.heapArgs.add((ap.localName, ap.typ, x, sizeToAlloc, ComplexityExpression(LoopComplexityAnalyzer(innermostLoop(ap.loop)).get._2, collectedIntFields.toMap)))
+      x += 1
+    }
+    
+    for (hp <- heapParams)
+      envstructs.append(NamedType("kernel"), ValDef(hp, EmptyTree()))
+    
+    functions.map(f => f match {
+      case Function(params, funBlock@Block(body, Ident(Method(funName, retType)))) if funName.equals(kernelMethodName) => {
+
+        val kernEnvIdx = body.indexWhere(t => t match { case ValDef(LocalValue(NoSymbol,"_this_kernel", NamedType("kernel_ENV")),EmptyTree()) => true
+                                                        case _ => false })
+        val newBody = body.toBuffer
+        newBody.insert((kernEnvIdx + 1), heapParams.map(hp =>
+          Assign(Select(Ident(LocalValue(NoSymbol,"_this_kernel",NamedType("kernel"))),Field(hp.name,hp.tpe)), Ident(LocalValue(NoSymbol,hp.name, hp.tpe)))):_*)
+
+        Function(params ::: heapParams, Block(newBody.toList, Ident(Method(funName, retType))))
+      }
+      case x => x
+    })
+  }
+  
   /*
   def printTree(a: scala.Product, indent: Int): Unit = {
     for (i <- a.productIterator) {
@@ -499,8 +648,8 @@ object JVM2Reflect {
   }
 
   private def compileMethod(m: SootMethod, level: Int, takesThis: Boolean, anonFuns: HashMap[String, Value]): Tree = {
-    // println("-------------------------------------------------------")
-    // println(m)
+    println("-------------------------------------------------------")
+    println(m)
 
     if (m.isAbstract)
       return null
@@ -525,6 +674,31 @@ object JVM2Reflect {
     }
 
     val units = unitBuffer.toList
+
+    /////////////////////////////////////////
+    // ADDED FOR MEMORY USE ANALYSIS
+
+    val g = new ExceptionalUnitGraph(gb)
+
+
+    val tfa = new FPMemUse(g)
+
+    val loops = tfa.buildLoops
+    val finalFlow = tfa.getFlowAfter(g.last)
+
+    val allocationUnits = tfa.getAllocationUnits
+
+    for ((k,v) <- allocationUnits) {
+      v.scope = finalFlow.get(v.localName) match {
+        case Some(scope) => scope
+        case None => throw new RuntimeException("Cannot get scope for " + v.localName)
+      }
+    }
+
+    allocationUnits.keySet.foreach((u: SootUnit) => println("Unit: " + u + " allocation point: " + tfa.getAllocationUnits.get(u)))
+
+    allocByUnit ++= allocationUnits
+    
     /*
     println("Grimp method body:")
     println(units.mkString("\n"))
@@ -747,7 +921,7 @@ object JVM2Reflect {
   }
 
 
-  private def translateType(mem: String, typ: String, name: String): (Type, String) = {
+  def translateType(mem: String, typ: String, name: String): (Type, String) = {
     val memType = mem match { 
       case "global" => "g_" 
       case "local" => "l_" 
@@ -891,6 +1065,75 @@ object JVM2Reflect {
     def clearEnvs = structs.clear
   }
 
+  private class ClassTable {
+    val knownClasses = new HashMap[SootClass, (Tree /* struct */ , Tree /* union */ )]()
+    val enumElements = new ListBuffer[Tree]()
+
+    def addClass(cls: SootClass) = {
+      // HACK to ignore Java classes for now
+      if (!knownClasses.contains(cls) && !cls.getName.startsWith("java.")) {
+        enumElements += ValDef(LocalValue(NoSymbol, mangleName(cls.getName) + "_ID", StructTyp(mangleName(cls.getType.toString))), EmptyTree())
+
+        val sSig = if (cls.getName.contains("$")) getScalaJavaSignature(cls.getName, cls)
+        else getScalaSignature(cls.getName)
+
+        val scalaSig = sSig.asInstanceOf[List[ScalaClassDef]]
+
+        if (scalaSig == null)
+          throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
+
+        try {
+          val superTypeStructs = getSupertypes(scalaSig).filter(st => st match {
+            case NamedTyp(name: String) if name.equals("scala.ScalaObject") => false
+            case NamedTyp(name: String) if name.equals("java.lang.Object") => false
+            case _ => true
+          }).map(st => st match {
+            case NamedTyp(n: String) => ValDef(LocalValue(NoSymbol, "_" + mangleName(n), StructTyp(mangleName(n))),EmptyTree())    // ValDef(LocalValue(_,name,typ), _)
+            case InstTyp(base: NamedTyp, _) => ValDef(LocalValue(NoSymbol, "_" + mangleName(base.name), StructTyp(mangleName(base.name))),EmptyTree()) // VarDef(StructType(mangleName(base.name)), Id("_" + mangleName(base.name)))
+            case _ => ValDef(LocalValue(NoSymbol,"UNKNOWN", StructTyp("UNKNOWN")),EmptyTree())
+          })
+
+          // val struct = StructDef(Id(mangleName(cls.getName)), VarDef(IntType, Id("__id")) :: superTypeStructs ::: scalaSig.head.fields.map(f => VarDef(translateType(f), f.name)))
+          // val struct = Struct(ValDef(LocalValue(NoSymbol, "_" + mangleName(cls.getName), StructTyp(mangleName(cls.getName))),EmptyTree()), ValDef(LocalValue(NoSymbol, "__id", translateType(SootIntType)),EmptyTree()) :: superTypeStructs ::: scalaSig.head.fields.map(f => ValDef(LocalValue(NoSymbol,mangleName(f.name), StructTyp(f.fieldTypeAsString)),EmptyTree())))
+          
+//          for (f <- scalaSig.head.fields)
+//            println("SCALASIG FIELD: " + f.fieldTyp)
+          
+          val struct = Struct("_" + mangleName(cls.getName), ValDef(LocalValue(NoSymbol, "__id", translateType("Int")), EmptyTree()) :: superTypeStructs ::: scalaSig.head.fields.filter(f => f.fieldTyp match {
+            case nmt: NullaryMethodType => false
+            case z => {
+              println("FIELD IS NOT NULLARY: " + z + ". It is: " + z.getClass.getPackage.getName)
+              true
+            }
+          }).map(f => ValDef(LocalValue(NoSymbol,mangleName(f.name), StructTyp(f.fieldTypeAsString)),EmptyTree())))
+          // maybe we should also call addClass on list returned from getDirectSubclassesOf(cls)
+          // val union = UnionDef(Id(mangleName(cls.getName) + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(mangleName(sc.getName)), Id("_" + mangleName(sc.getName)))).toList)
+          val union = Union(mangleName(cls.getName) + "_intr", ValDef(LocalValue(NoSymbol, "object", StructTyp("Object")), EmptyTree()) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => ValDef(LocalValue(NoSymbol,mangleName("__"+sc.getName),StructTyp(mangleName(sc.getName))),EmptyTree())).toList)
+          
+          knownClasses += cls ->(struct, union)
+
+          preambleEnvs += TypeDef(NamedType("_" + mangleName(cls.getName)), NamedType(mangleName(cls.getName)))
+        } catch {
+          case e: ClassNotFoundException => {
+            println("Class not found: " + e.getMessage)
+            knownClasses
+          }
+        }
+      }
+    }
+
+    def dumpClassTable = {
+      val classtable = List[Tree](Struct("Object", List(ValDef(LocalValue(NoSymbol, "__id", translateType("Int")), EmptyTree()))),
+        Enum("KNOWN_CLASSES", enumElements.toList)) ::: knownClasses.values.map(v => Block(List(v._1, v._2),EmptyTree())).toList
+      // println("CLASSTABLE CL:")
+      // classtable.foreach((ct: Tree) => println(ct.toCL))
+      classtable
+    }
+
+    def clearClassTable = {
+      knownClasses.clear; enumElements.clear
+    }
+  }
 
   object ScalaMathCall {
     def unapply(v: Value): Option[(String, List[Value])] = {
@@ -1072,7 +1315,7 @@ object JVM2Reflect {
     }
   }
 
-  private def translateExp(v: Value, symtab: SymbolTable, anonFuns: HashMap[String, Value]): Tree = {
+  private def translateExp(v: Value, symtab: SymbolTable, anonFuns: HashMap[String, Value])(implicit currentUnit: SootUnit): Tree = {
     implicit val iv: (SymbolTable, HashMap[String, Value]) = (symtab, anonFuns)
     v match {
 
@@ -1110,7 +1353,27 @@ object JVM2Reflect {
           case GNew(newTyp) => { /* classtab.addClass(new SootClass(newTyp.asInstanceOf[SootType].toString));*/ DummyTree("unimplemented:new") }
 
           // IGNORE
-          case GNewArray(newTyp, size) => DummyTree("GNewArray") // Id("unimplemented:newarray")
+          case GNewArray(newTyp, size) => {
+            val ap = allocByUnit.get(currentUnit) match {
+              case Some(ap) => ap
+              case None => throw new RuntimeException("Unable to find allocation point for NewInvoke")
+            }
+
+            size match {
+              case x: IntConstant => println("Size is an int constant")
+              case ifr: InstanceFieldRef => println("Size is an IFR")
+              case _ => println("Size is an " + size)
+            }
+
+            val realSize = ComplexityExpression(LoopComplexityAnalyzer(innermostLoop(ap.loop)).get._2, collectedIntFields.toMap)
+
+            println("realSize: " + realSize)
+
+            worklist += CompileMethodTree(MallocArrayFunction("malloc_"+ap.mallocNum, realSize /*size*/, newTyp.asInstanceOf[SootArrayType]).getTree)
+
+            Apply(Select(Ident(NoSymbol), Method("malloc_"+ap.mallocNum,MethodType(List(LocalValue(NoSymbol,"x",translateType(newTyp))),
+              PrefixedType(ThisType(Class("scala")),Class("scala.Any"))))), List(Select(Ident(LocalValue(NoSymbol,"_this_kernel",NamedType("kernel"))),Field("_heap_"+ap.mallocNum,translateType(newTyp)))))
+          } // Id("unimplemented:newarray")
           // IGNORE
           case GNewMultiArray(newTyp, sizes) => DummyTree("GNewMultiArray") // Id("unimplemented:newmultiarray")
 
@@ -1164,7 +1427,23 @@ object JVM2Reflect {
 
               // TODO: Some things call new such as java.lang.Float.valueOf, need a way to handle this
               // Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a, symtab, anonFuns))))
-              DummyTree("Call _init")
+              // Removed for memory allocation: DummyTree("Call _init")
+              DummyTree("Allocation point for unit: " + allocByUnit(currentUnit))
+              val ap = allocByUnit.get(currentUnit) match {
+                case Some(ap) => ap
+                case None => throw new RuntimeException("Unable to find allocation point for NewInvoke")
+              }
+              /*
+              TODO: This will need to become a malloc with constructor call
+
+              Apply(Select(Ident(NoSymbol), Method("malloc_"+ap.mallocNum,MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Any")))),
+                PrefixedType(ThisType(Class("scala")),Class("scala.Any"))))), args.map(a => translateExp(a, symtab, anonFuns)))
+              */
+
+              classtab.addClass(baseTyp.getSootClass)
+              "malloc_"+ap.mallocNum
+              Apply(Select(Ident(NoSymbol), Method("malloc_"+ap.mallocNum,MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Any")))),
+                PrefixedType(ThisType(Class("scala")),Class("scala.Any"))))), List(Select(Ident(LocalValue(NoSymbol,"_this_kernel",NamedType("kernel"))),Field("_heap_"+ap.mallocNum,PrefixedType(ThisType(Class("scala")),Class("scala.Any"))))))
             }
           }
 
@@ -1485,7 +1764,7 @@ object JVM2Reflect {
     }
   }
 
-  private def handleIdsVirtualInvoke(v: Value, symtab: SymbolTable, anonFuns: HashMap[String, Value]): Option[Tree] = {
+  private def handleIdsVirtualInvoke(v: Value, symtab: SymbolTable, anonFuns: HashMap[String, Value])(implicit currentUnit: SootUnit): Option[Tree] = {
     val fieldName = v.asInstanceOf[soot.jimple.VirtualInvokeExpr].getBase match {
       case ifr: soot.grimp.internal.GInstanceFieldRef => mangleName(ifr.getField.getName)
       case sfr: soot.jimple.StaticFieldRef => mangleName(sfr.getField.getName)
@@ -1573,6 +1852,7 @@ object JVM2Reflect {
     implicit val iv: (SymbolTable, HashMap[String, Value]) = (symtab, anonFuns)
     units match {
       case u :: us => {
+        implicit val currentUnit = u
         val tree: Tree = u match {
           case GIdentity(left: Value, right) => {
             left match {
@@ -1585,8 +1865,11 @@ object JVM2Reflect {
             }
             Assign(left,right) 
           }
-          case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => {
-            DummyTree("Assign from new array")
+          case GAssignStmt(left: Local, gna: NewArrayExpr) => {
+            symtab.addLocalVar(left.getType, LocalValue(NoSymbol, mangleName(left.getName), translateType(left.getType)))
+
+            // DummyTree("Assign from new array")
+            Assign(left,gna)
           }
           case GAssignStmt(left: Local, right) => {
             envstructs.addStruct(NamedType("kernel"))
@@ -1793,6 +2076,7 @@ object JVM2Reflect {
 
   private val arraystructs = new ArrayStructs()
   private val envstructs = new EnvStructs()
+  private val classtab = new ClassTable()
 
   private def translateLabel(u: SootUnit, symtab: SymbolTable): LabelSymbol = u match {
     case target: Stmt => {
@@ -1810,6 +2094,8 @@ object JVM2Reflect {
 
   private def makeFunction(m: SootMethod, body: List[Tree], symtab: SymbolTable, takesThis: Boolean) = {
     //     val params = new HashMap[Int, (Symbol, Type)]() 
+    println("CALL TO makeFunction for " + m.getDeclaringClass.getName + " kernelMethod = " + symtab.kernelMethod)
+
     val varTree = new ListBuffer[Tree]()
 
     val funParams = new ListBuffer[Symbol]()
@@ -1867,6 +2153,7 @@ object JVM2Reflect {
         val (t: Type, s: String) = translateType("local", i._2, i._1, -1)
         funParams += LocalValue(NoSymbol, s, t)
       }
+
       
       // println("#### globalArgs = " + Kernel.globalArgs.length)
       // println("#### localArgs = " + Kernel.localArgs.length)

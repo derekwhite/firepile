@@ -32,6 +32,7 @@ import com.nativelibs4java.opencl.library.OpenCLLibrary
 import com.nativelibs4java.opencl.library.OpenCLLibrary._
 import com.nativelibs4java.util.JNAUtils.toNS
 import com.sun.jna.Native
+import com.ochafik.lang.jnaerator.runtime.NativeSize
 
 
 // TODO: remove most of this.
@@ -63,7 +64,7 @@ object Compiler {
     gMethod match {
 
       case Some(x: java.lang.reflect.Method) => {
-        Some((methodName(x), compileRoot(src.getClass.getName, Compiler.signature(x), argMarshals, dev).reverse))
+        Some((methodName(x), compileRoot(src.getClass.getName, src, Compiler.signature(x), argMarshals, dev).reverse))
       }
       case None => { println(" Not able to find the method with Global variables !!!"); return None }
     }
@@ -106,7 +107,7 @@ object Compiler {
   }
 
   def findKernelMethod(c2: String): Option[(java.lang.reflect.Method, String)] = {
-    // println("findKernelMethod start")
+    println("==========\nfindKernelMethod start\n==========")
     //println(" Generating Kernel Code ::")
     var i = 1
     while (true) {
@@ -153,6 +154,8 @@ object Compiler {
 
   def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3]) = {
     val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
+
+    println("=======\ncompileNew: " + kernName)
 
     val (a1, a2, a3) = tuple
 
@@ -226,82 +229,10 @@ object Compiler {
 
 
     compileN_BB((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
-  }  
-// compile for standard Scala arrays. Creates a ByteBuffer. Slow.
-
-/*
-  def compileNew[A1, A2](tuple: Tuple2[A1, A2], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device) = {
-    val marshalInfo =  new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
-    marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
-    marshalInfo.add((ma2, ma2.toBuffer(tuple._2).head, ma2.sizes(tuple._2).head, ma2.sizes(1).head, ma2.sizes(tuple._2).head / ma2.sizes(1).head))
-
-    compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
   }
 
 
-  def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3]) = {
-    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
-    marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
-    marshalInfo.add((ma2, ma2.toBuffer(tuple._2).head, ma2.sizes(tuple._2).head, ma2.sizes(1).head, ma2.sizes(tuple._2).head / ma2.sizes(1).head))
-    marshalInfo.add((ma3, ma3.toBuffer(tuple._3).head, ma3.sizes(tuple._3).head, ma3.sizes(1).head, ma3.sizes(tuple._3).head / ma3.sizes(1).head))
-
-
-    compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
-  }
-
-  def compileNew[A1, A2, A3, A4](tuple: Tuple4[A1, A2, A3, A4], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device) = {
-    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
-    marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
-    marshalInfo.add((ma2, ma2.toBuffer(tuple._2).head, ma2.sizes(tuple._2).head, ma2.sizes(1).head, ma2.sizes(tuple._2).head / ma2.sizes(1).head))
-    marshalInfo.add((ma3, ma3.toBuffer(tuple._3).head, ma3.sizes(tuple._3).head, ma3.sizes(1).head, ma3.sizes(tuple._3).head / ma3.sizes(1).head))
-    marshalInfo.add((ma4, ma4.toBuffer(tuple._4).head, ma4.sizes(tuple._4).head, ma4.sizes(1).head, ma4.sizes(tuple._4).head / ma4.sizes(1).head))
-
-
-    compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
-  }
-
-  def compileNew[A1, A2, A3, A4, A5](tuple: Tuple5[A1, A2, A3, A4, A5], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], dev: Device) = {
-    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
-    marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
-    marshalInfo.add((ma2, ma2.toBuffer(tuple._2).head, ma2.sizes(tuple._2).head, ma2.sizes(1).head, ma2.sizes(tuple._2).head / ma2.sizes(1).head))
-    marshalInfo.add((ma3, ma3.toBuffer(tuple._3).head, ma3.sizes(tuple._3).head, ma3.sizes(1).head, ma3.sizes(tuple._3).head / ma3.sizes(1).head))
-    marshalInfo.add((ma4, ma4.toBuffer(tuple._4).head, ma4.sizes(tuple._4).head, ma4.sizes(1).head, ma4.sizes(tuple._4).head / ma4.sizes(1).head))
-    marshalInfo.add((ma5, ma5.toBuffer(tuple._5).head, ma5.sizes(tuple._5).head, ma5.sizes(1).head, ma5.sizes(tuple._5).head / ma5.sizes(1).head))
-
-
-    compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
-  }
-
-  def compileNew[A1, A2, A3, A4, A5, A6](tuple: Tuple6[A1, A2, A3, A4, A5, A6], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], ma6: Marshal[A6], dev: Device) = {
-    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
-    marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
-    marshalInfo.add((ma2, ma2.toBuffer(tuple._2).head, ma2.sizes(tuple._2).head, ma2.sizes(1).head, ma2.sizes(tuple._2).head / ma2.sizes(1).head))
-    marshalInfo.add((ma3, ma3.toBuffer(tuple._3).head, ma3.sizes(tuple._3).head, ma3.sizes(1).head, ma3.sizes(tuple._3).head / ma3.sizes(1).head))
-    marshalInfo.add((ma4, ma4.toBuffer(tuple._4).head, ma4.sizes(tuple._4).head, ma4.sizes(1).head, ma4.sizes(tuple._4).head / ma4.sizes(1).head))
-    marshalInfo.add((ma5, ma5.toBuffer(tuple._5).head, ma5.sizes(tuple._5).head, ma5.sizes(1).head, ma5.sizes(tuple._5).head / ma5.sizes(1).head))
-    marshalInfo.add((ma6, ma6.toBuffer(tuple._6).head, ma6.sizes(tuple._6).head, ma6.sizes(1).head, ma6.sizes(tuple._6).head / ma6.sizes(1).head))
-
-
-    compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
-  }
-
-  def compileNew[A1, A2, A3, A4, A5, A6, A7](tuple: Tuple7[A1, A2, A3, A4, A5, A6, A7], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], ma6: Marshal[A6], ma7: Marshal[A7], dev: Device) = {
-    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
-    marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
-    marshalInfo.add((ma2, ma2.toBuffer(tuple._2).head, ma2.sizes(tuple._2).head, ma2.sizes(1).head, ma2.sizes(tuple._2).head / ma2.sizes(1).head))
-    marshalInfo.add((ma3, ma3.toBuffer(tuple._3).head, ma3.sizes(tuple._3).head, ma3.sizes(1).head, ma3.sizes(tuple._3).head / ma3.sizes(1).head))
-    marshalInfo.add((ma4, ma4.toBuffer(tuple._4).head, ma4.sizes(tuple._4).head, ma4.sizes(1).head, ma4.sizes(tuple._4).head / ma4.sizes(1).head))
-    marshalInfo.add((ma5, ma5.toBuffer(tuple._5).head, ma5.sizes(tuple._5).head, ma5.sizes(1).head, ma5.sizes(tuple._5).head / ma5.sizes(1).head))
-    marshalInfo.add((ma6, ma6.toBuffer(tuple._6).head, ma6.sizes(tuple._6).head, ma6.sizes(1).head, ma6.sizes(tuple._6).head / ma6.sizes(1).head))
-    marshalInfo.add((ma7, ma7.toBuffer(tuple._7).head, ma7.sizes(tuple._7).head, ma7.sizes(1).head, ma7.sizes(tuple._7).head / ma7.sizes(1).head))
-
-
-    compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
-  }
-*/
-
-
-  def compileN_BB(tuple: List[(_,(Marshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = { 
+  def compileN_BB(tuple: List[(_,(Marshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = {
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
 
     val outputBuffers = new ArrayList[(CLByteBuffer, Int, Marshal[_], Int, Int)]()
@@ -316,24 +247,25 @@ object Compiler {
 
       Kernel.globalArgs.get(i) match {
         case (name: String, typ: SootType, index: Int) => {
+          println("Setting global arg " + i + " of type " + typ + " with name " + name)
           val (data, marshalInfo) = tuple(index)
-		  if (data.isInstanceOf[BBArray[_]] && !marshalInfo._2.isDirect)
-		    throw new RuntimeException("Use direct NIO buffers for better copy performance")
-			
+		      if (data.isInstanceOf[BBArray[_]] && !marshalInfo._2.isDirect)
+		          throw new RuntimeException("Use direct NIO buffers for better copy performance")
+
           for (j <- 0 until Kernel.outputArgs.size)
             if (name.startsWith(Kernel.outputArgs.get(j)))
               output = true
-         
+
           if (output) {
             val clBuf = dev.context.createByteBuffer(CLMem.Usage.Output, marshalInfo._3)
             outputBuffers.add((clBuf, marshalInfo._3, marshalInfo._1, index, marshalInfo._5))
             val nItems = marshalInfo._5
-		  
+
             if (nItems > maxOutputItems) {
               maxOutputItems = nItems
               maxOutputSize = marshalInfo._4
             }
-            
+
             firepile.compiler.JVM2Reflect.translateType(typ, index) match {
               case NamedType(typeName) if typeName.endsWith("Array") => {
                 kernBin.setArg(i+numArrays, clBuf)
@@ -348,12 +280,12 @@ object Compiler {
 
           } else {
             val nItems = marshalInfo._5
-            
+
             if (nItems > maxInputItems) {
               maxInputItems = nItems
               maxInputSize = marshalInfo._4
             }
- 
+
 //            time({
               val copyToGPU = System.nanoTime
 
@@ -365,7 +297,13 @@ object Compiler {
                 case ValueType("float") => kernBin.setArg(i+numArrays, data.asInstanceOf[Float])
                 case ValueType("long") => kernBin.setArg(i+numArrays, data.asInstanceOf[Long])
                 case ValueType("double") => kernBin.setArg(i+numArrays, data.asInstanceOf[Double])
-                case ValueType(typName) if typName.endsWith("Array") => firepile.tree.Reflect2CL.translateType(typName.replace("Array", "")) match {
+                case ValueType(typName) if typName.endsWith("Array") => {
+                  println("Setting array arg of type: " + typName)
+                  kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
+                  numArrays += 1
+                  kernBin.setArg(i+numArrays, nItems)
+                  /*
+                  firepile.tree.Reflect2CL.translateType(typName.replace("Array", "")) match {
                   case "int" => {
                     kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                     numArrays += 1
@@ -373,7 +311,6 @@ object Compiler {
                   }
                   case "float" => {
                     kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
-//                    println("First item of float buffer: " + marshalInfo.get(1)._2.asFloatBuffer.get(0).asInstanceOf[Float])
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
@@ -387,15 +324,17 @@ object Compiler {
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
-                  case _ => throw new RuntimeException("Trying to setArg with unsupported array type")
+                  case t => throw new RuntimeException("Trying to setArg with unsupported array type: " + t + " arg number = " + (i+numArrays) + " with name " + name)
+                }
+                */
                 }
 
                 case x => {
-                  kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
+                  throw new RuntimeException("Setting unknown arg type") // kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                 }
-        
+
               }
-              
+
 //            }, "Copy to GPU")
               Kernel.setTime("Copy to GPU", (System.nanoTime-copyToGPU))
           }
@@ -403,98 +342,110 @@ object Compiler {
           }
           case _ => {}
         }
-      }
+     }
 
    //println(" output Buffer size::"+ outputBuffers.size)
    //println(" max Input size ::"+ maxInputSize + " max Input items ::" + maxInputItems)
    //println(" max Output size ::"+ maxOutputSize + " max Output items ::" + maxOutputItems)
-   
-   
-      val threads = (if (maxInputItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxInputItems) / scala.math.log(2))) else dev.maxThreads).toInt
 
-      // WARM UP
-        if (dev.memConfig == null) {
 
-          if (Kernel.localArgs.size > 0) {
-            kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, threads * maxOutputSize)
-            kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, threads)
-          }
-          kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
+    val threads = (if (maxInputItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxInputItems) / scala.math.log(2))) else dev.maxThreads).toInt
 
-        } else {
-          //println(" Setting default arguments ")
-          if (Kernel.localArgs.size > 0) {
-            kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, dev.memConfig.localMemSize * maxOutputSize)
-            kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, dev.memConfig.localMemSize)
-          }
-          kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
-        }
-        dev.queue.finish
-      // END WARM UP
+    // WARM UP
+
+    // END WARM UP
 
 //      time({
-        // println("Number of kernel localArgs = " + Kernel.localArgs.size)  BUG HERE?
- 
-        val gpuTime = System.nanoTime
-        var x = 0
-        while (x < numIterations) {
-          if (dev.memConfig == null) {
+      // println("Number of kernel localArgs = " + Kernel.localArgs.size)  BUG HERE?
 
-            if (Kernel.localArgs.size > 0) {
-              kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, threads * maxOutputSize)
-              kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, threads)
-            }
-            kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
+//        val gpuTime = System.nanoTime
+//        var x = 0
+//        while (x < numIterations) {
 
-          } else {
-            //println(" Setting default arguments ")
-            if (Kernel.localArgs.size > 0) {
-              kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, dev.memConfig.localMemSize * maxOutputSize)
-              kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, dev.memConfig.localMemSize)
-            }
-            kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
-          }
-          x += 1
-        }
+    // Set local arg (TODO: needs to be rewritten to support multiple local arguments)
+    val (localArgPos, localArgSize, localArgLen, globalSize, localSize) = if (dev.memConfig == null && Kernel.localArgs.size > 0)
+      (Kernel.globalArgs.size + numArrays, threads * maxOutputSize, threads, Array[Int](maxOutputItems * threads), Array[Int](threads))
+    else
+      (Kernel.globalArgs.size + numArrays, dev.memConfig.localMemSize * maxOutputSize, dev.memConfig.localMemSize, dev.memConfig.globalSize, dev.memConfig.localSize)
+
+    kernBin.setLocalArg(localArgPos, localArgSize)
+    kernBin.setArg(localArgPos + 1, localArgLen)
+
+    // Set heap space args
+    for ((localName, typ, pIndex, size, arrayLen) <- Kernel.heapArgs) {
+      println("Setting heap parameter for: " + localName)
+
+      val typeSize = 4       // TODO: Use a real calculation of typeSize
+
+      // kernBin.setArg(localArgPos + 1 + pIndex, new NativeSize(typeSize * size * globalSize(0)))
+      val heapSize = typeSize * size * globalSize(0)
+      Kernel.heapMemory = heapSize
+      Kernel.globalSize = globalSize(0)
+      kernBin.setArg(localArgPos + 1 + pIndex, dev.context.createByteBuffer(CLMem.Usage.Input, heapSize))
+
+    }
+
+    // Execute the kernel
+    kernBin.enqueueNDRange(dev.queue, globalSize, localSize)
+
+/*
+    if (dev.memConfig == null) {
+      if (Kernel.localArgs.size > 0) {
+        kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, threads * maxOutputSize)
+        kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, threads)
+      }
+      kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
+
+    } else {
+      //println(" Setting default arguments ")
+      if (Kernel.localArgs.size > 0) {
+        kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, dev.memConfig.localMemSize * maxOutputSize)
+        kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, dev.memConfig.localMemSize)
+      }
+      kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
+    }
+*/
+//         x += 1
+//        }
 //      }, "GPU", numIterations)
 
-      dev.queue.finish
-      Kernel.setTime("GPU", (System.nanoTime - gpuTime)/numIterations)
+    dev.queue.finish
+//      Kernel.setTime("GPU", (System.nanoTime - gpuTime)/numIterations)
 
 //      time({
 
-      val copyFromGPU = System.nanoTime
-        // println("Number of output buffers: " + outputBuffers.size)
-        for (i <- 0 until outputBuffers.size) {
-          outputBuffers.get(i) match {
-            case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
-              val (data, _) = tuple(index)
-              // println("total size of output buffer: " + totalSize)
-              data match {
-                case d: BBArray[_] => {
-				                        val clOut = CLEvent.new_event_out(null)
-				                        val clArray = CLEvent.to_cl_event_array(null)  
-				                        JavaCL.CL.clEnqueueReadBuffer(dev.queue.getEntity(),clBuf.getEntity(),CL_TRUE,toNS(0),toNS(totalSize),Native.getDirectBufferPointer(d.buffer),0 ,clArray,clOut)
-				                        //d.buffer = bufOut 
-									   }	
-                case _ => {  
-				            val bufOut = allocDirectBuffer(totalSize)
-							clBuf.read(dev.queue, bufOut, true)
-							bufOut.rewind
-							Array.copy(bufOut, 0, data.asInstanceOf[AnyRef], 0, items)
-              				Array.copy(marshal.fromBuffer(List(bufOut)), 0, data.asInstanceOf[AnyRef], 0, items) 
-					}
-              }
-            }
-            case _ => {}
-          }
+    val copyFromGPU = System.nanoTime
+      // println("Number of output buffers: " + outputBuffers.size)
+      for (i <- 0 until outputBuffers.size) {
+        outputBuffers.get(i) match {
+          case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
+            val (data, _) = tuple(index)
+            // println("total size of output buffer: " + totalSize)
+            data match {
+              case d: BBArray[_] => {
+                              val clOut = CLEvent.new_event_out(null)
+                              val clArray = CLEvent.to_cl_event_array(null)
+                              JavaCL.CL.clEnqueueReadBuffer(dev.queue.getEntity(),clBuf.getEntity(),CL_TRUE,toNS(0),toNS(totalSize),Native.getDirectBufferPointer(d.buffer),0 ,clArray,clOut)
+                              //d.buffer = bufOut
+                   }
+              case _ => {
+                  val bufOut = allocDirectBuffer(totalSize)
+            clBuf.read(dev.queue, bufOut, true)
+            bufOut.rewind
+            Array.copy(bufOut, 0, data.asInstanceOf[AnyRef], 0, items)
+                    Array.copy(marshal.fromBuffer(List(bufOut)), 0, data.asInstanceOf[AnyRef], 0, items)
         }
+            }
+          }
+          case _ => {}
+        }
+      }
 //      }, "From GPU")
-      Kernel.setTime("From GPU", (System.nanoTime - copyFromGPU))
+    Kernel.setTime("From GPU", (System.nanoTime - copyFromGPU))
 
   }
 
-  def compileN(tuple: List[(_,(Marshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = { 
+  def compileN(tuple: List[(_,(Marshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = {
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
 
     val outputBuffers = new ArrayList[(CLByteBuffer, Int, Marshal[_], Int, Int)]()
@@ -513,17 +464,17 @@ object Compiler {
           for (j <- 0 until Kernel.outputArgs.size)
             if (name.startsWith(Kernel.outputArgs.get(j)))
               output = true
-         
+
           if (output) {
             val clBuf = dev.context.createByteBuffer(CLMem.Usage.Output, marshalInfo._3)
             outputBuffers.add((clBuf, marshalInfo._3, marshalInfo._1, index, marshalInfo._5))
             val nItems = marshalInfo._5
-		  
+
             if (nItems > maxOutputItems) {
               maxOutputItems = nItems
               maxOutputSize = marshalInfo._4
             }
-            
+
             firepile.compiler.JVM2CL.translateType(typ, index) match {
               case StructType(typeName) if typeName.endsWith("Array") => {
                 kernBin.setArg(i+numArrays, clBuf)
@@ -538,12 +489,12 @@ object Compiler {
 
           } else {
             val nItems = marshalInfo._5
-            
+
             if (nItems > maxInputItems) {
               maxInputItems = nItems
               maxInputSize = marshalInfo._4
             }
- 
+
             time({
 
               firepile.compiler.JVM2CL.translateType(typ, index) match {
@@ -581,9 +532,9 @@ object Compiler {
                 case x => {
                   kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                 }
-        
+
               }
-              
+
             }, "Copy to GPU")
           }
 
@@ -595,13 +546,13 @@ object Compiler {
    //println(" output Buffer size::"+ outputBuffers.size)
    //println(" max Input size ::"+ maxInputSize + " max Input items ::" + maxInputItems)
    //println(" max Output size ::"+ maxOutputSize + " max Output items ::" + maxOutputItems)
-   
-   
+
+
       val threads = (if (maxInputItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxInputItems) / scala.math.log(2))) else dev.maxThreads).toInt
 
       time({
         // println("Number of kernel localArgs = " + Kernel.localArgs.size)  BUG HERE?
-     
+
         if (dev.memConfig == null) {
 
           if (Kernel.localArgs.size > 0) {
@@ -638,7 +589,7 @@ object Compiler {
       }, "From GPU")
 
   }
- 
+
 
   def compileNew[A1, A2, A3, A4](a: A1, b: A2, c: A3, d: A4, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device) = {
 
@@ -870,7 +821,7 @@ object Compiler {
       kernStr.append(t.toCL)
 
     val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
-    
+
 //    class Arg[A](val value: A, val marshal: Marshal[A]) {
 //        def toBuffers = marshal.toBuffer(value)
 //    }
