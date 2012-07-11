@@ -556,7 +556,7 @@ object JVM2Reflect {
 
     val resultsWithHeapBufs = insertHeapBuffers(results.toList)
 
-    val tree = arraystructs.dumpArrayStructs ::: preambleArrays.toList ::: envstructs.dumpEnvStructs ::: preambleEnvs.toList ::: classtab.dumpClassTable ::: functionDefs.values.toList ::: resultsWithHeapBufs
+    val tree = arraystructs.dumpArrayStructs ::: preambleArrays.toList ::: envstructs.dumpEnvStructs ::: preambleEnvs.toList ::: /* classtab.dumpClassTable ::: */ functionDefs.values.toList ::: resultsWithHeapBufs
 
     arraystructs.clearArrays
     envstructs.clearEnvs
@@ -681,24 +681,24 @@ object JVM2Reflect {
     val g = new ExceptionalUnitGraph(gb)
 
 
-    val tfa = new FPMemUse(g)
-
-    val loops = tfa.buildLoops
-    val finalFlow = tfa.getFlowAfter(g.last)
-
-    val allocationUnits = tfa.getAllocationUnits
-
-    for ((k,v) <- allocationUnits) {
-      v.scope = finalFlow.get(v.localName) match {
-        case Some(scope) => scope
-        case None => throw new RuntimeException("Cannot get scope for " + v.localName)
-      }
-    }
-
-    allocationUnits.keySet.foreach((u: SootUnit) => println("Unit: " + u + " allocation point: " + tfa.getAllocationUnits.get(u)))
-
-    allocByUnit ++= allocationUnits
-    
+//    val tfa = new FPMemUse(g)
+//
+//    val loops = tfa.buildLoops
+//    val finalFlow = tfa.getFlowAfter(g.last)
+//
+//    val allocationUnits = tfa.getAllocationUnits
+//
+//    for ((k,v) <- allocationUnits) {
+//      v.scope = finalFlow.get(v.localName) match {
+//        case Some(scope) => scope
+//        case None => throw new RuntimeException("Cannot get scope for " + v.localName)
+//      }
+//    }
+//
+//    allocationUnits.keySet.foreach((u: SootUnit) => println("Unit: " + u + " allocation point: " + tfa.getAllocationUnits.get(u)))
+//
+//    allocByUnit ++= allocationUnits
+//
     /*
     println("Grimp method body:")
     println(units.mkString("\n"))
