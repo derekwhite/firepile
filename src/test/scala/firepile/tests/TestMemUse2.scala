@@ -21,11 +21,11 @@ object TestMemUse2 {
     val random = new Random(0)
     val randInput = Array.fill(NUM_ITEMS)(random.nextFloat)
 
-    testBasicNew(BBArray.fromArray(randInput).directCopy, 17)(firepile.gpu)
+    // rayTrace(BBArray.fromArray(randInput).directCopy, 17)(firepile.gpu)
 
   }
 
-  def rayTrace(scene: Scene, rgb: Array[Int], screenHeight: Int, screenWidth: Int)(implicit dev: Device) {
+/*  def rayTrace(scene: Scene, rgb: Array[Int], screenHeight: Int, screenWidth: Int)(implicit dev: Device) {
     val space = dev.defaultPaddedPartition(screenHeight)
     // val odata = BBArray.ofDim[Float](space.blocks).directCopy
     val n = idata.length
@@ -42,4 +42,5 @@ object TestMemUse2 {
        }
      }
 
-  }
+  }*/
+}
