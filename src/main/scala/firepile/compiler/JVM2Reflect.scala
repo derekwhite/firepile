@@ -2,7 +2,7 @@ package firepile.compiler
 
 import scala.tools.scalap._
 import scala.tools.scalap.{ Main => Scalap }
-import firepile.memory.{AllocationPoint, FPMemUse}
+import firepile.memory.{AllocationPoint, MemUse}
 import firepile.compiler.JVM2Reflect.ClassTable
 import soot.jimple._
 
@@ -681,7 +681,7 @@ object JVM2Reflect {
     val g = new ExceptionalUnitGraph(gb)
 
 
-//    val tfa = new FPMemUse(g)
+//    val tfa = new MemUse(g)
 //
 //    val loops = tfa.buildLoops
 //    val finalFlow = tfa.getFlowAfter(g.last)
