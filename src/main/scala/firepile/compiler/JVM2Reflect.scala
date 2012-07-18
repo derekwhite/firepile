@@ -2,7 +2,7 @@ package firepile.compiler
 
 import scala.tools.scalap._
 import scala.tools.scalap.{ Main => Scalap }
-import firepile.memory.{AllocationPoint, MemUse}
+import firepile.memory.{MemRegions, AllocationPoint, MemUse, ComplexityExpression}
 import firepile.compiler.JVM2Reflect.ClassTable
 import soot.jimple._
 
@@ -81,7 +81,6 @@ import firepile.BBArrayMarshal
 import firepile.Device
 
 import abc.analoop.LoopComplexityAnalyzer
-import firepile.memory.ComplexityExpression
 import firepile.memory.LoopUtils.innermostLoop
 
 import scala.collection.mutable.HashMap
@@ -681,24 +680,25 @@ object JVM2Reflect {
     val g = new ExceptionalUnitGraph(gb)
 
 
-//    val tfa = new MemUse(g)
-//
-//    val loops = tfa.buildLoops
-//    val finalFlow = tfa.getFlowAfter(g.last)
-//
-//    val allocationUnits = tfa.getAllocationUnits
-//
-//    for ((k,v) <- allocationUnits) {
-//      v.scope = finalFlow.get(v.localName) match {
-//        case Some(scope) => scope
-//        case None => throw new RuntimeException("Cannot get scope for " + v.localName)
-//      }
-//    }
-//
-//    allocationUnits.keySet.foreach((u: SootUnit) => println("Unit: " + u + " allocation point: " + tfa.getAllocationUnits.get(u)))
-//
-//    allocByUnit ++= allocationUnits
-//
+    val mufa = new MemUse(g)
+    val mrfa = new MemRegions(g, mufa.getParams)
+
+    val loops = mufa.buildLoops
+    val finalFlow = mrfa.getFlowAfter(g.last)
+
+    val allocationUnits = mufa.getAllocationUnits
+
+    for ((k,v) <- allocationUnits) {
+      v.scope = finalFlow.get(v.localName) match {
+        case Some(scope) => scope
+        case None => throw new RuntimeException("Cannot get scope for " + v.localName)
+      }
+    }
+
+    allocationUnits.keySet.foreach((u: SootUnit) => println("Unit: " + u + " allocation point: " + mufa.getAllocationUnits.get(u)))
+
+    allocByUnit ++= allocationUnits
+
     /*
     println("Grimp method body:")
     println(units.mkString("\n"))
@@ -1428,6 +1428,7 @@ object JVM2Reflect {
               // TODO: Some things call new such as java.lang.Float.valueOf, need a way to handle this
               // Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a, symtab, anonFuns))))
               // Removed for memory allocation: DummyTree("Call _init")
+              println("Units with allocations: " + allocByUnit)
               DummyTree("Allocation point for unit: " + allocByUnit(currentUnit))
               val ap = allocByUnit.get(currentUnit) match {
                 case Some(ap) => ap
