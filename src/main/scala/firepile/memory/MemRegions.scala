@@ -206,7 +206,7 @@ class MemRegions(graph: UnitGraph, params: List[String]) extends ForwardFlowAnal
         localName(use.asInstanceOf[ValueBox].getValue) match {
           case name: String => in.get(name) match {
             case Some(scope) => if (scope < least) least = scope
-            case None => throw new RuntimeException("leastRegion: var not found in in set")
+            case None => throw new RuntimeException("leastRegion: var " + name + " not found in in set (" + in + ")")
           }
           case _ => {}
         }

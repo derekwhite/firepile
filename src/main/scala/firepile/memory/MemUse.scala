@@ -29,6 +29,7 @@ import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import firepile.compiler.GrimpUnapply._
+import firepile.compiler.JVM2Reflect.mangleName
 
 import abc.analoop.LoopLanguageTrees._
 import abc.analoop.{LLTreePrinter, LoopComplexityAnalyzer}
@@ -201,6 +202,7 @@ class MemUse(graph: UnitGraph) extends ForwardFlowAnalysis[SootUnit,Map[String,B
     val bexpr: BExpr = u match {
       case GIf(cond: BinopExpr, _) => cond
       case x: ReturnStmt => null
+      case x => null
     }
 
     if (bexpr != null) {
@@ -242,18 +244,37 @@ class MemUse(graph: UnitGraph) extends ForwardFlowAnalysis[SootUnit,Map[String,B
     case GMul(op1, op2) => Mult(op1, op2)
     case GSub(op1, op2) => Sub(op1, op2)
     case GDiv(op1, op2) => Div(op1, op2)
+    case GShr(op1, GIntConstant(x)) => {
+      val shift = math.pow(2, x).toInt
+      Div(op1, shift)
+    }
+    case GShl(op1, GIntConstant(x)) => {
+      val shift = math.pow(2, x).toInt
+      Mult(op1, shift)
+    }
   }
 
   implicit def value2AExpr(v: Value): AExpr = v match {
-    case l: Local => /* localIncrements.get(l.getName) match {
-      case Some(x) => x
-      case None => IntVar(l.getName)
-    } // */ IntVar(l.getName)
+    case GLocal(name, _) => IntVar(name)
     case ic: IntConstant => IntVal(ic.value)
     case ifr: InstanceFieldRef => IntVar(ifr.getField.getName.substring(0, ifr.getField.getName.indexOf("$")))
+/*
+    case GVirtualInvoke(GInstanceFieldRef(_, field), method, args) => IntVar(field.name + "_" + method.name)
+    case GInterfaceInvoke(GInstanceFieldRef(_, field), method, args) => IntVar(field.name + "_" + method.name)
+    case GInterfaceInvoke(GVirtualInvoke(GInstanceFieldRef(_, field)), method, args) => throw new RuntimeException("base is " + base.getClass.toString)
+*/
     case boe: BinopExpr => boe
+    case base => mangleName(chainBaseNames(base))
+//    case x => throw new RuntimeException("value2AExpr: Unknown element in binop expr: " + x.getClass.toString)
   }
 
+  def chainBaseNames(v: Value): String = v match {
+    case GVirtualInvoke(base, method, _) => chainBaseNames(base) + "_" + method.name
+    case GInterfaceInvoke(base, method, _) => chainBaseNames(base) + "_" + method.name
+    case GInstanceFieldRef(base, field) => chainBaseNames(base) + "_" + field.name
+    case GLocal(name, _) => name
+    case x => throw new RuntimeException("chainBaseNames: unknown base " + v.getClass.toString)
+  }
 
   protected def merge(in1: Map[String,Boolean], in2: Map[String,Boolean], out: Map[String,Boolean]) {
   /*

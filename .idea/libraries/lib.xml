@@ -2,8 +2,6 @@
   <library name="lib">
     <CLASSES>
       <root url="jar://$PROJECT_DIR$/lib/sootclasses.jar!/" />
-      <root url="jar://$PROJECT_DIR$/lib/memory.jar!/" />
-      <root url="jar://$PROJECT_DIR$/lib/scala-compiler.jar!/" />
       <root url="jar://$PROJECT_DIR$/lib/scalap.jar!/" />
       <root url="jar://$PROJECT_DIR$/lib/abc.jar!/" />
       <root url="jar://$PROJECT_DIR$/lib/javacl-1.0-beta-5-shaded.jar!/" />
