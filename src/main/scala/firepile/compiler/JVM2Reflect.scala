@@ -679,7 +679,7 @@ object JVM2Reflect {
 
     val g = new ExceptionalUnitGraph(gb)
 
-
+/*
     val mufa = new MemUse(g)
     val mrfa = new MemRegions(g, mufa.getParams)
 
@@ -698,6 +698,8 @@ object JVM2Reflect {
     allocationUnits.keySet.foreach((u: SootUnit) => println("Unit: " + u + " allocation point: " + mufa.getAllocationUnits.get(u)))
 
     allocByUnit ++= allocationUnits
+
+    */
 
     /*
     println("Grimp method body:")
