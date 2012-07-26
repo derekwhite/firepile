@@ -42,6 +42,18 @@ class Test1 {
     a
   }
 
+  def g1b(x: Int) = {
+    var r: Array[Int] = null
+    var a = 3
+    while (a < 10) {
+      r = new Array(x)
+      val t = new Array[Int](100)
+      a += 1
+    }
+
+    r
+  }
+
   def g2(a: Int) = {
     var r: Array[Int] = null
     var a = 0
