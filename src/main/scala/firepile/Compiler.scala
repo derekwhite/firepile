@@ -58,17 +58,16 @@ object Compiler {
     m.getName + "(" + m.getParameterTypes.toList.map(t => typeSig(t)).mkString("") + ")" + typeSig(m.getReturnType)
 
   def findAllMethods(src: AnyRef, arity: Int, argMarshals: List[Marshal[_]], dev: Device): Option[(String, List[Tree])] = {
-
     val gMethod = findGlobalMethod(src.getClass.getName, arity)
 
     gMethod match {
-
       case Some(x: java.lang.reflect.Method) => {
         Some((methodName(x), compileRoot(src.getClass.getName, src, Compiler.signature(x), argMarshals, dev).reverse))
       }
-      case None => { println(" Not able to find the method with Global variables !!!"); return None }
+      case None => {
+        println(" Not able to find the method with Global variables !!!"); return None
+      }
     }
-
   }
 
   def findGlobalMethod(cname1: String, arity: Int): Option[java.lang.reflect.Method] = {
@@ -82,6 +81,7 @@ object Compiler {
     None
   }
 
+/*
   def findLocalMethod(c1: String): Option[(java.lang.reflect.Method, String)] = {
     var i = 1
     while (true) {
@@ -105,7 +105,9 @@ object Compiler {
 
     None
   }
+*/
 
+/*
   def findKernelMethod(c2: String): Option[(java.lang.reflect.Method, String)] = {
     println("==========\nfindKernelMethod start\n==========")
     //println(" Generating Kernel Code ::")
@@ -134,6 +136,7 @@ object Compiler {
     //println("findKernelMethod end")
     None
   }
+*/
 
   def compileNew[A1, A2](tuple: Tuple2[A1, A2], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2]) = {
     val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()

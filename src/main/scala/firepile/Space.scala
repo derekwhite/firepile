@@ -82,7 +82,7 @@ val sizeA2 = transA2.sizes(1).head
           kernStr.append(t.toCL)
 
         println("Kernel: \n" + kernStr)
-        firepile.Compiler.compileNew(fvals, kernName, kernStr.toString, dev) //(m1,m2,m3,dev) 
+        firepile.Compiler.compileNew(fvals, kernName, kernStr.toString, dev) //(m1,m2,m3,dev)
         Kernel.printMemUse
       }
 
